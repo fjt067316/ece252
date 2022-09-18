@@ -64,3 +64,34 @@ int filetype(char *argv)
     return 0;
 }
 */
+
+
+// ############################# FUNCTION FROM lab_png.h
+
+
+#define PNG_SIG_SIZE    8 /* number of bytes of png image signature data */
+#define CHUNK_LEN_SIZE  4 /* chunk length field size in bytes */          
+#define CHUNK_TYPE_SIZE 4 /* chunk type field size in bytes */
+#define CHUNK_CRC_SIZE  4 /* chunk CRC field size in bytes */
+#define DATA_IHDR_SIZE 13 /* IHDR chunk data field size */
+typedef unsigned char U8;
+typedef unsigned int  U32;
+// Put below in a header file -> returns bool 0 for false 1 for true
+int is_png( U8 *buf ){
+
+    // read first 8 bytes of png file and make sure they are equyal to : 137 80 78 71 13 10 26 10 -> (decimal)
+    // char = 1 byte so 8 chars for 8 bytes // 1 bytes = 8 bits
+    unsigned char png_tag[8] = {137, 80, 78, 71, 13, 10, 26, 10};
+
+    for(int i = 0; i<8;i++){
+        //printf("%d ", buf[i]);
+        if( (png_tag[i] ^ buf[i]) != 0){
+            // printf("byte %d, expected: %d, actual: %d, NOT A PNG\n", i, png_tag[i], buf[i]);
+            return 0;
+        }
+    }
+
+   // printf("IS A PNG\n");
+    return 1;
+
+}

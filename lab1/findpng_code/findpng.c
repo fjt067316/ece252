@@ -1,10 +1,4 @@
-// if file is regular check to see if 8 ytes are png signature
-// recursive dfs
-
-/**
- * @file: ls_fname.c
- * @brief: simple ls command to list file names of a directory 
-  */
+// IMPLEMENT ERROR CHECK FUNCTIOPN TO MAKE SURE PNG ISNT CORRUPT??
 
 #include <sys/types.h>
 #include <dirent.h>
@@ -48,15 +42,23 @@ int main(int argc, char *argv[])
            // printf("%s\n", str_path );
             char relative_path[64];
             snprintf(relative_path, sizeof(relative_path), "%s/%s", argv[1], str_path);
-            if( filetype(relative_path) == 1 ){
+            int type = filetype(relative_path);
+            if( type == 1 ){
                 recurse_dir(relative_path);
                 // printf("%s\n", relative_path);
+            } else if (type == 0){
+                char buf[8];
+                FILE* fp = fopen(relative_path, "rb");
+                fread(buf, sizeof(buf), 1, fp);
+
+                if(is_png(buf)){
+                    // is a png
+                    printf("%s\n", relative_path);
+                }
+
             }
         }
     }
-
-    // get ll files and recurse adding to path
-    filetype("helper.h");
 
     if ( closedir(p_dir) != 0 ) {
         perror("closedir");
@@ -86,18 +88,29 @@ void recurse_dir(char* dir_path){
         }else if ( ( (strcmp(str_path, "..") == 0 ) || ( strcmp(str_path, ".") ) == 0) ){
             continue;
         } else {
-            if(strlen(str_path) == 1){
-                return;
-            }
-            printf("STRPATH: %s\n", str_path );
             char relative_path[64];
             snprintf(relative_path, sizeof(relative_path), "%s/%s", dir_path, str_path);
-            printf("%s", relative_path);
-            if( filetype(relative_path) == 1 ){
+            //printf("%s\n", relative_path);
+            int type = filetype(relative_path);
+            if( type == 1 ){
                 recurse_dir(relative_path);
                 // printf("%s", relative_path);
+            } else if (type == 0){
+                char buf[8];
+                FILE* fp = fopen(relative_path, "rb");
+                fread(buf, sizeof(buf), 1, fp);
+
+                if(is_png(buf)){
+                    // is a png
+                    printf("%s\n", relative_path);
+                }
             }
         }
+    }
+
+    if ( closedir(p_dir) != 0 ) {
+        perror("closedir");
+        exit(3);
     }
 
 }
