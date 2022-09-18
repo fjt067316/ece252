@@ -142,6 +142,6 @@ int get_png_data_IHDR(struct data_IHDR *out, FILE *fp) {
     // crc 
     unsigned int crc;
     fread((char*)&crc, 4, 1, fp);
-    
+    // IMPLEMENT CRC CHECKER FOR PNGINFO FUNCTION AND ADD ERROS #########################################
     return 0;
 }
