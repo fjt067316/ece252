@@ -11,7 +11,8 @@
  * INCLUDE HEADER FILES
  *****************************************************************************/
 #include <stdio.h>
-
+#include <arpa/inet.h>
+#include <stdlib.h>
 /******************************************************************************
  * DEFINED MACROS 
  *****************************************************************************/
@@ -61,30 +62,26 @@ typedef struct simple_PNG {
 /******************************************************************************
  * FUNCTION PROTOTYPES 
  *****************************************************************************/
-int is_png(char* path);
+int is_png(U8 *buf);
 int get_png_height(struct data_IHDR *buf);
 int get_png_width(struct data_IHDR *buf);
-int get_png_data_IHDR(struct data_IHDR *out, FILE *fp, long offset, int whence);
+int get_png_data_IHDR(struct data_IHDR *out, FILE *fp);
+int get_png_data_IDAT(struct chunk *out, FILE *fp);
 
 /* declare your own functions prototypes here */
-// Put below in a header file -> returns bool 0 for false 1 for true
-int is_png( char* path ){
 
-    FILE* fp = fopen(path, "rb");
-    if (fp == NULL) {
-        printf("NOT A PNG FILE BHRUV");
-        return 0;
-    }
+
+// Put below in a header file -> returns bool 0 for false 1 for true
+int is_png( U8 *buf ){
+
     // read first 8 bytes of png file and make sure they are equyal to : 137 80 78 71 13 10 26 10 -> (decimal)
     // char = 1 byte so 8 chars for 8 bytes // 1 bytes = 8 bits
-    char png_tag[8] = {137, 80, 78, 71, 13, 10, 26, 10};
-    char buf[8];
-    fread(buf, sizeof(buf), 1, fp);
-    // check xor == 0
-    
+    unsigned char png_tag[8] = {137, 80, 78, 71, 13, 10, 26, 10};
+
     for(int i = 0; i<8;i++){
+        //printf("%d ", buf[i]);
         if( (png_tag[i] ^ buf[i]) != 0){
-            printf("NOT A PNG\n");
+            printf("byte %d, expected: %d, actual: %d, NOT A PNG\n", i, png_tag[i], buf[i]);
             return 0;
         }
     }
@@ -92,4 +89,78 @@ int is_png( char* path ){
     printf("IS A PNG\n");
     return 1;
 
+}
+
+
+// get IHDR data
+int get_png_data_IHDR(struct data_IHDR *out, FILE *fp) {
+    // fseek to offset then read
+    // https://www.tutorialspoint.com/c_standard_library/c_function_fseek.htm
+    // First 8 bytes are sig then read chunk
+    fseek(fp, 8 , SEEK_SET);
+
+    // IHDR should have 00 00 00 0D (13 byte data) + 49 48 44 52
+    unsigned char IHDR_CHUNK_INFO[8] = {0, 0, 0, 13, 'I', 'H', 'D', 'R'};
+    unsigned char chunk_dat[8];
+
+    fread(chunk_dat, sizeof(chunk_dat), 1, fp);
+    // make sure it is ihdr block 
+    for(int i = 0; i < 8; i++){
+        //printf("%d == %d \n", chunk_dat[i], IHDR_CHUNK_INFO[i]);
+        if( ( chunk_dat[i] ^ IHDR_CHUNK_INFO[i] ) != 0 ){
+            printf("%d == %d NOT A PNG IHDR CHUNK\n", chunk_dat[i], IHDR_CHUNK_INFO[i]);
+            return -1;
+        }
+    }
+    // read 4 bytes to get width
+    // unsigned int width[1];
+    // fseek(fp, 17 , SEEK_SET);
+    // fread( width, sizeof(unsigned int), 1, fp);
+    // printf("%u", width[0]);
+    unsigned int sizes[2];
+    unsigned int width;
+    unsigned int height;
+    // fseek just to be sure but don thave too
+    fseek(fp, 16 , SEEK_SET);
+    fread((char*)&sizes, 4, 2, fp);
+    width = htonl(sizes[0]);
+    height = htonl(sizes[1]);
+    //printf("%u ", width );
+    //printf("%d", height);
+
+    out->width = width;
+    out->height = height;
+
+    // array of 5 1 byte items which will be the info
+    char image_info[5];
+    fread(image_info, 1, 5, fp);
+    out->bit_depth = image_info[0];
+    out->color_type = image_info[1];
+    out->compression = image_info[2];
+    out->filter = image_info[3];
+    out->interlace = image_info[4];
+    //printf("%u", out->interlace);
+
+    // crc 
+    unsigned int crc;
+    fread((char*)&crc, 4, 1, fp);
+    // IMPLEMENT CRC CHECKER FOR PNGINFO FUNCTION AND ADD ERROS #########################################
+    return 0;
+}
+
+int get_png_data_IDAT(struct chunk *out, FILE *fp){
+
+    fseek(fp, 33 , SEEK_SET);
+    // read idat data length and make sure chunk type is idat
+    // 4 Bytes idat length
+    fread( &(out->length) , sizeof(U32), 1, fp); // read chunk data length
+    out->length = htonl(out->length);
+    fread( &(out->type) , sizeof(U32), 1, fp);
+    out->p_data = malloc( out->length ); // malloc(256*16)
+    
+    fread( out->p_data , out->length, 1, fp);
+    // 4B crc
+    fread( &(out->crc) , sizeof(U32), 1, fp);
+    
+    return 0;
 }
