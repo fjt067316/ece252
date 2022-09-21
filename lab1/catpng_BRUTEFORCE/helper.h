@@ -156,15 +156,16 @@ int get_png_data_IDAT(struct chunk *out, FILE *fp){
     fread( &(out->length) , sizeof(U32), 1, fp); // read chunk data length
     out->length = htonl(out->length);
     fread( &(out->type) , sizeof(U32), 1, fp);
+
     out->p_data = malloc( out->length ); // malloc(256*16)
-    
     fread( out->p_data , out->length, 1, fp);
+
     // 4B crc
     fread( &(out->crc) , sizeof(U32), 1, fp);
     
     return 0;
 }
-
+/*
 int get_png_data_IHDR(struct data_IHDR *out, FILE *fp) {
     // fseek to offset then read
     // https://www.tutorialspoint.com/c_standard_library/c_function_fseek.htm
@@ -219,3 +220,4 @@ int get_png_data_IHDR(struct data_IHDR *out, FILE *fp) {
     // IMPLEMENT CRC CHECKER FOR PNGINFO FUNCTION AND ADD ERROS #########################################
     return 0;
 }
+*/

@@ -66,7 +66,7 @@ int main (int argc, char **argv)
 
     /* Step 1.2: Fill the buffer with some data */
     // init_data(p_buffer, BUF_LEN);
-    get_png_data_IDAT( &data, fp);
+    //get_png_data_IDAT( &data, fp);
 
 
     /* Step 2: Demo how to use zlib utility */
