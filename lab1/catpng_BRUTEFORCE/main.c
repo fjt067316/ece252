@@ -19,7 +19,7 @@
  * DEFINED MACROS 
  *****************************************************************************/
 #define BUF_LEN  (256*16)
-#define BUF_LEN2 (256*32)
+#define BUF_LEN2 (256*32*32)
 
 /******************************************************************************
  * GLOBALS 
@@ -44,44 +44,50 @@ int main (int argc, char **argv)
     int ret = 0;          /* return value for various routines             */
     U64 len_def = 0;      /* compressed data length                        */
     U64 len_inf = 0;      /* uncompressed data length                      */
-    int len_concat = 0; // length of concatenated data uncompressed
+    U64 len_concat = 0; // length of concatenated data uncompressed
     int concat_height = 0;
     U32 crc_val = 0;
-    long int buf_size = BUF_LEN2;
+  //  long int buf_size = BUF_LEN2;
 
     U8* gp_buf_inf = malloc(BUF_LEN2*32*8);
-   // create png file and add signature and idat ihdr iend manually +  manually then afterwards memset idat
-//    /* TESTING INFLATE DEFALTE */
-//        ret = mem_inf(gp_buf_inf, &len_inf, data.p_data, data.length);
-//    if (ret == 0) { /* success */
-//        printf("original len = %d, len_inf = %lu\n", data.length, len_inf);
-//    } else { /* failure */
-//        fprintf(stderr,"mem_def failed. ret = %d.\n", ret);
-//        return ret;
-//    }
-//    
-//    len_concat = len_concat + len_inf;
-//    fwrite(gp_buf_inf, len_inf,1,bp);
-//    /* END TESTING INFLATE DEFALTE */
-    // create file
-//    FILE* bp = fopen("tmp_buffer.png", "wb+");
-// testing
-//    FILE* fp_og = fopen("fp_original.png", "wb+");
-//    FILE* fp_modified = fopen("fp_modified.png", "wb+");
+    memset(gp_buf_inf, 0, BUF_LEN2*32*8);
+    memset(gp_buf_def, 0, BUF_LEN2);
+
+    FILE* fp_modified = fopen("fp_modified.png", "wb+");
+
+        /* TESTING */
+//        FILE* fp = fopen(argv[2], "rb");
+//        struct chunk data;
+//        get_png_data_IDAT( &data, fp);
+//        concat_height = concat_height + get_height(fp);//
+
+//        ret = mem_inf(gp_buf_inf + len_concat, &len_inf, data.p_data, data.length);
+//        if (ret == 0) { /* success */
+//            printf("original len = %d, len_inf = %lu\n", data.length, len_inf);
+//        } else { /* failure */
+//            fprintf(stderr,"mem_def failed. ret = %d.\n", ret);
+//            return ret;
+//        }//
+
+//        ret = mem_def(gp_buf_def, &len_def, gp_buf_inf, len_inf, Z_DEFAULT_COMPRESSION);
+//        if (ret == 0) { /* success */
+//            printf("len inf all together = %d, len_def = %lu\n", \
+//                   len_concat, len_def);
+//        } else { /* failure */
+//            fprintf(stderr,"mem_def failed. ret = %d.\n", ret);
+//        }
+//        fwrite(gp_buf_def, len_def, 1, fp_modified);
+//        exit(1);
+        /* END TESTING */
+
     // LOOP writting uncompressed IDAT to file then recompress and look at length and ntoh length and ad length field to IHDR and make IEND data
     for(int i=1; i < argc; i++){
         
-        FILE* fp = fopen(argv[i], "rb");
+        FILE* fp = fopen(argv[i], "rb");  // DO NOT DELETE
         struct chunk data;
-        //struct IHDR ihdr_dat;
-        // array of pointers which point to each chunk->data
-        // get idat data of every file and push the data onto a stack / new file
-        
-        /* Step 1.2: Fill the buffer with some data */
+
         get_png_data_IDAT( &data, fp);
         concat_height = concat_height + get_height(fp);
-        // printf("height: %i\n", concat_height);
-        //get_png_data_IHDR( &ihdr_dat, fp);
 
         ret = mem_inf(gp_buf_inf + len_concat, &len_inf, data.p_data, data.length);
         if (ret == 0) { /* success */
@@ -90,80 +96,29 @@ int main (int argc, char **argv)
             fprintf(stderr,"mem_def failed. ret = %d.\n", ret);
             return ret;
         }
-/* testing */
-//        ret = mem_def(gp_buf_def, &len_def, gp_buf_inf, len_inf, Z_DEFAULT_COMPRESSION);
-//        if (ret == 0) { /* success */
-//            printf("len_og = %d, len inf = %ld, len_def = %lu\n", data.length, len_inf, len_def);
-//        } else { /* failure */
-//            fprintf(stderr,"mem_def failed. ret = %d.\n", ret);
-//            return ret;
-//        }
-//
-//        
-//        fwrite(data.p_data, data.length, 1, fp_og);
-//        fwrite(gp_buf_def, len_def,1,fp_modified); 
-//        exit(1);
-/* end testing */
+
         len_concat = len_concat + len_inf;
-
-        //if(len_concat >= 0.5*buf_size){
-        //    gp_buf_def = realloc(&gp_buf_def, 2*buf_size);
-        //    // resize(&gp_buf_inf, &buf_size);
-        //}
-        
-
-//        fwrite(gp_buf_inf, len_inf,1,bp);
-
-// testing below 
-        //    fwrite(data.p_data, data.length, 1, fp_og); // original data before inflation and compression
-//        fwrite(gp_buf_inf, len_inf, 1, fp_og);
-//        len_concat = len_inf;
-//        U8* tmp_buf1 = malloc( len_concat );
-//        fread(tmp_buf1, len_concat, 1, bp); // read inflated data into tmp_buf1
-//      mem_def(gp_buf_def, &len_def, gp_buf_inf, len_inf, Z_DEFAULT_COMPRESSION);
-//        mem_def(gp_buf_def, &len_def, tmp_buf1, len_concat, Z_DEFAULT_COMPRESSION); // deflate data in tmp buffer
-//        fwrite(gp_buf_def, len_def,1,fp_modified); // write recompressed data to fp_modified file
-//        printf(" original idat data chunk size %d, new decomrpessed size %ld\n", data.length, len_def);
-//        exit(0);
-        // printf( "buffer file ptr position %ld \n", ftell(bp) );
-
-// done testing
         fclose(fp);
 
     }
-    
-    // can probably jsut write to gp_buf_def + concat_len in line 79 and not use file as buffer
-    // create new buffer of size len_concat
 
-   
-
- //   U8* tmp_buf = malloc( len_concat );
- //   fread(tmp_buf, len_concat, 1, bp); // Read in the entire file to a buffer
- 
-    // recompress data and store in buffer gp_buf_def
- //   ret = mem_def(gp_buf_def, &len_def, tmp_buf, len_concat, Z_DEFAULT_COMPRESSION);
     ret = mem_def(gp_buf_def, &len_def, gp_buf_inf, len_concat, Z_DEFAULT_COMPRESSION);
     if (ret == 0) { /* success */
-        printf("len inf all together = %d, len_def = %lu\n", \
+        printf("len inf all together = %ld, len_def = %lu\n", \
                len_concat, len_def);
     } else { /* failure */
         fprintf(stderr,"mem_def failed. ret = %d.\n", ret);
     }
-//    fwrite(gp_buf_def, len_def,1,fp_modified);
-    // delete file with tmp data and create blank file for png
-//    fclose(bp);
-//    exit(0);
-// testing 
 
-//   fwrite(gp_buf_def, len_def,1,fp_modified);
-//   exit(0);
-// done testing
+    
+   // printf("hit");
+   // exit(1);
 
     FILE* bp = fopen("tmp_buffer.png", "wb+");
-    //fseek(bp, 0, SEEK_SET);
+
     // write png sig to file copying from the first png
     // make sure at least one arg 
-    FILE* fp = fopen(argv[1], "rb");
+    FILE* fp = fopen(argv[1], "rb");                  // DO NOT DELETE
     
     // copy ihdr from the first file into the new png that will be created so it has all the same info   
     char bytes[33]; // make dynamic to free
@@ -195,24 +150,22 @@ int main (int argc, char **argv)
     fwrite(idat_crc_buf, len_def+4,1,bp);
 //    fwrite(idat, 4,1,bp); // write "IDAT" chunk type
 //    fwrite(gp_buf_def, len_def,1,bp); // write compressed binary data 
-    free(idat_crc_buf);
+    
      // write crc
 
     crc_val = htonl( crc(idat_crc_buf, len_def+4) ); // CRC USES TYPE AND DATA FIELD
     fwrite(&crc_val, 4,1,bp); // write compressed binary data 
-
+    
     // ADD IEND DATA AND FIX HEIGHT VALUE IN CORRECT ENDIANESS -> try pnginfo function and opening file 
     // iend = 4 bytes of 0 + "IEND" + crc
     unsigned char iend[8] = {0, 0, 0, 0, 'I', 'E', 'N', 'D'};
     fwrite(iend, 8,1,bp);
     crc_val = htonl(crc(&iend[4], 4));
     fwrite(&crc_val, 4,1,bp); // write proper crc
-    // change height
-//  fopen("tmp_buffer.png", "wb+");
-
-    fclose(bp);
+    
     /* Clean up */
-    //free(tmp_buf);
+    free(idat_crc_buf);
+    fclose(bp);
     return 0;
 }
 
