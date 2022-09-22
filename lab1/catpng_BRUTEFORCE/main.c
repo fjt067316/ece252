@@ -25,7 +25,7 @@
  * GLOBALS 
  *****************************************************************************/
 U8 gp_buf_def[BUF_LEN2]; /* output buffer for mem_def() */
-U8 gp_buf_inf[BUF_LEN2*32]; /* output buffer for mem_inf() */
+ /* output buffer for mem_inf() */
 
 /******************************************************************************
  * FUNCTION PROTOTYPES 
@@ -37,6 +37,7 @@ U8 gp_buf_inf[BUF_LEN2*32]; /* output buffer for mem_inf() */
  *****************************************************************************/
 int get_height(FILE* fp);
 int is_png( U8 *buf );
+void resize(U8** buffer, long int *size);
 
 int main (int argc, char **argv)
 {
@@ -46,6 +47,9 @@ int main (int argc, char **argv)
     int len_concat = 0; // length of concatenated data uncompressed
     int concat_height = 0;
     U32 crc_val = 0;
+    long int buf_size = BUF_LEN2;
+
+    U8* gp_buf_inf = malloc(BUF_LEN2*32*8);
    // create png file and add signature and idat ihdr iend manually +  manually then afterwards memset idat
 //    /* TESTING INFLATE DEFALTE */
 //        ret = mem_inf(gp_buf_inf, &len_inf, data.p_data, data.length);
@@ -62,8 +66,8 @@ int main (int argc, char **argv)
     // create file
 //    FILE* bp = fopen("tmp_buffer.png", "wb+");
 // testing
-    FILE* fp_og = fopen("fp_original.png", "wb+");
-    FILE* fp_modified = fopen("fp_modified.png", "wb+");
+//    FILE* fp_og = fopen("fp_original.png", "wb+");
+//    FILE* fp_modified = fopen("fp_modified.png", "wb+");
     // LOOP writting uncompressed IDAT to file then recompress and look at length and ntoh length and ad length field to IHDR and make IEND data
     for(int i=1; i < argc; i++){
         
@@ -72,7 +76,7 @@ int main (int argc, char **argv)
         //struct IHDR ihdr_dat;
         // array of pointers which point to each chunk->data
         // get idat data of every file and push the data onto a stack / new file
-
+        
         /* Step 1.2: Fill the buffer with some data */
         get_png_data_IDAT( &data, fp);
         concat_height = concat_height + get_height(fp);
@@ -102,6 +106,12 @@ int main (int argc, char **argv)
 /* end testing */
         len_concat = len_concat + len_inf;
 
+        //if(len_concat >= 0.5*buf_size){
+        //    gp_buf_def = realloc(&gp_buf_def, 2*buf_size);
+        //    // resize(&gp_buf_inf, &buf_size);
+        //}
+        
+
 //        fwrite(gp_buf_inf, len_inf,1,bp);
 
 // testing below 
@@ -121,6 +131,7 @@ int main (int argc, char **argv)
         fclose(fp);
 
     }
+    
     // can probably jsut write to gp_buf_def + concat_len in line 79 and not use file as buffer
     // create new buffer of size len_concat
 
@@ -158,17 +169,36 @@ int main (int argc, char **argv)
     char bytes[33]; // make dynamic to free
     fread(bytes, 33, 1, fp); // read 33 bytes into buffer bytes
     fwrite(bytes, 33, 1, bp);
-    
+    //write height to file
+    fseek(bp, 20, SEEK_SET);
+    concat_height = ntohl(concat_height);
+    fwrite( &concat_height, 4, 1, bp);
+    // calculate crc for ihdr and add
+    fseek(bp, 12, SEEK_SET); // seek to ihdr data field
+    fread(bytes, 17, 1, bp); // read the ihdr data field (13 bytes)
+    crc_val = htonl(crc(bytes, 17));
+    fseek(bp, 29, SEEK_SET);    // go to crc position
+    fwrite( &crc_val, 4, 1, bp); //write crc data
+
     fclose(fp);
 //    exit(1);
 
     // add IDAT data length and chunk type along with data
     unsigned char idat[4] = { 'I', 'D', 'A', 'T'};
+    /* merge idat chunk type and deflated data */
+    U8* idat_crc_buf = malloc(len_def + 4);
+    memcpy(idat_crc_buf, idat, 4); // copy chars into crc buffer
+    memcpy(idat_crc_buf+4, gp_buf_def, len_def); // copy chars into crc buffer
+    len_def = htonl(len_def);
     fwrite(&len_def, 4,1,bp); // write length of idat chunk
-    fwrite(idat, 4,1,bp); // write "IDAT" chunk type
-    fwrite(gp_buf_def, len_def,1,bp); // write compressed binary data 
+    len_def = ntohl(len_def);
+    fwrite(idat_crc_buf, len_def+4,1,bp);
+//    fwrite(idat, 4,1,bp); // write "IDAT" chunk type
+//    fwrite(gp_buf_def, len_def,1,bp); // write compressed binary data 
+    free(idat_crc_buf);
      // write crc
-    crc_val = htonl( crc(idat, len_def) ); // CRC USES TYPE AND DATA FIELD
+
+    crc_val = htonl( crc(idat_crc_buf, len_def+4) ); // CRC USES TYPE AND DATA FIELD
     fwrite(&crc_val, 4,1,bp); // write compressed binary data 
 
     // ADD IEND DATA AND FIX HEIGHT VALUE IN CORRECT ENDIANESS -> try pnginfo function and opening file 
@@ -180,16 +210,21 @@ int main (int argc, char **argv)
     // change height
 //  fopen("tmp_buffer.png", "wb+");
 
-    fseek(bp, 20, SEEK_SET);
-    concat_height = ntohl(concat_height);
-    fwrite( &concat_height, 4, 1, bp);
-
     fclose(bp);
     /* Clean up */
     //free(tmp_buf);
     return 0;
 }
 
+void resize(U8** buffer, long int *size){
+
+    U8* tmp = malloc( (*size)*2 );
+    memcpy(tmp, buffer, *size);
+    free(*buffer);
+    *buffer=tmp;
+    *size *= 2;
+
+}
 
 // MAKE SURE TO USE ntoh() WHEN WRITTING LENGTH OF DATA TO IDAT
 int get_height(FILE* fp){
