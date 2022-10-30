@@ -58,8 +58,7 @@ int main(int argc, char **argv)
     struct thread_ret *p_results[NUM_THREADS];
      
     for (int i=0; i<NUM_THREADS; i++) {
-        in_params[i].x = i + 1;
-        in_params[i].y = i + 2;
+        in_params[i] = i;
         pthread_create(p_tids + i, NULL, do_work, in_params + i); 
     }
 

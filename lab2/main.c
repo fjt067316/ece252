@@ -31,6 +31,7 @@
 #include <unistd.h>
 #include <curl/curl.h>
 #include <stdint.h>
+#include <pthread.h>
 #include "helper.h"
 
 /******************************************************************************
@@ -44,7 +45,7 @@
  *****************************************************************************/
 U8 gp_buf_def[BUF_LEN2]; /* output buffer for mem_def() */
 
-#define IMG_URL "http://ece252-1.uwaterloo.ca:2520/image?img=2"
+#define IMG_URL "http://ece252-1.uwaterloo.ca:2520/image?img=1"
 #define DUM_URL "https://example.com/"
 #define ECE252_HEADER "X-Ece252-Fragment: "
 #define BUF_SIZE 1048576  /* 1024*1024 = 1M */
@@ -63,6 +64,19 @@ typedef struct recv_buf2 {
                      /* <0 indicates an invalid seq number */
 } RECV_BUF;
 
+struct thread_args              /* thread input parameters struct */
+{
+    uint64_t *curr_mask;
+    uint64_t full_mask;
+    char* url;
+
+};
+
+struct thread_ret               /* thread return values struct   */
+{
+    int sum;
+    int product;
+};
 
 size_t header_cb_curl(char *p_recv, size_t size, size_t nmemb, void *userdata);
 size_t write_cb_curl3(char *p_recv, size_t size, size_t nmemb, void *p_userdata);
@@ -73,7 +87,7 @@ int write_file(const char *path, const void *in, size_t len);
 void clean_output_dir(char* folder);
 int concat_50();
 int recv_buf_reset( RECV_BUF *ptr );
-
+void * get_image(void* args);
 /**
  * @brief  cURL header call back function to extract image sequence number from 
  *         http header data. An example header for image part n (assume n = 2) is:
@@ -216,21 +230,64 @@ int write_file(const char *path, const void *in, size_t len)
 
 int main( int argc, char** argv ) 
 {
-    CURL *curl_handle;
-    CURLcode res;
+    int NUM_THREADS = 10; // hardcoded for now
+
+    uint64_t mask = 0;
+    uint64_t full_mask = ((uint64_t)1<<50)-1; 
+    pthread_t *p_tids = malloc(sizeof(pthread_t) * NUM_THREADS);
+    struct thread_args in_params[NUM_THREADS];
+    struct thread_ret *p_results[NUM_THREADS];
     char url[256];
-    RECV_BUF recv_buf;
-    char fname[256];
-    pid_t pid =getpid();
-    
-    recv_buf_init(&recv_buf, BUF_SIZE);
-    
+
     if (argc == 1) {
         strcpy(url, IMG_URL); 
     } else {
         strcpy(url, argv[1]);
     }
+
     printf("%s: URL is %s\n", argv[0], url);
+    
+    clean_output_dir("./outputs/");
+
+    for (int i=0; i<NUM_THREADS; i++) {
+        in_params[i].curr_mask = &mask;
+        in_params[i].full_mask = full_mask;
+        in_params[i].url = url;
+        pthread_create(p_tids + i, NULL, get_image, in_params+i); 
+    }
+
+    /* get it! */
+    for (int i=0; i<NUM_THREADS; i++) {
+     //   pthread_join(p_tids[i], (void **)&(p_results[i]));
+        pthread_join(p_tids[i], NULL);
+//        printf("Thread ID %lu joined.\n", p_tids[i]);
+        
+    }
+
+    /* Concat images by sequence number */
+    // concate 50 png files
+    concat_50();
+
+    free(p_tids);
+    
+    /* the memory was allocated in the do_work thread for return values */
+    /* we need to free the memory here */
+//    for (int i=0; i<NUM_THREADS; i++) {
+//        free(p_results[i]);
+//    }
+
+    return 0;
+}
+
+void * get_image(void* args){
+    CURL *curl_handle;
+    CURLcode res;
+    struct thread_args *p_in = args;
+    RECV_BUF recv_buf;
+    char fname[256];
+    pid_t pid = getpid();
+    
+    recv_buf_init(&recv_buf, BUF_SIZE);
 
     curl_global_init(CURL_GLOBAL_DEFAULT);
 
@@ -239,12 +296,12 @@ int main( int argc, char** argv )
 
     if (curl_handle == NULL) {
         fprintf(stderr, "curl_easy_init: returned NULL\n");
-        return 1;
+        return -1;
     }
 
     /* specify URL to get */
-    curl_easy_setopt(curl_handle, CURLOPT_URL, url);
-
+    curl_easy_setopt(curl_handle, CURLOPT_URL, p_in->url);
+    
     /* register write call back function to process received data */
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_cb_curl3); 
     /* user defined data structure passed to the call back function */
@@ -257,16 +314,13 @@ int main( int argc, char** argv )
 
     /* some servers requires a user-agent field */
     curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+    
 
-    clean_output_dir("./outputs/");
-
-    /* get it! */
-    uint64_t mask = 0;
-    uint64_t full_mask = ((uint64_t)1<<50)-1; 
-    // printf("FULL MASK: %lu\n", full_mask );
-
-    while(mask != full_mask){
+    res = curl_easy_perform(curl_handle);
         
+    //printf("curr_mask: %lu, ");
+    while(*p_in->curr_mask != p_in->full_mask){  
+
         recv_buf_reset( &recv_buf ); // clear buffer every time
         res = curl_easy_perform(curl_handle);
 
@@ -274,30 +328,25 @@ int main( int argc, char** argv )
             fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
         } else {
 	        // printf("%lu bytes received in memory %p, seq=%d.\n", recv_buf.size, recv_buf.buf, recv_buf.seq);
-            if( 0 == (mask & ((uint64_t)1<< recv_buf.seq)) ){  
-                mask |= (uint64_t)1 << recv_buf.seq;
-                /* write file to ouputs folder*/
-                printf("seq=%d.\n", recv_buf.seq);
-            //    sprintf(fname, "./outputs/output_%d_%d.png", recv_buf.seq, pid);
+            if( 0 == ( (uint64_t) *p_in->curr_mask & ((uint64_t)1<< recv_buf.seq)) ){  
+                *(p_in->curr_mask) |= (uint64_t)1 << recv_buf.seq;
+                // write file to ouputs folder
+//                printf("seq=%d.\n", recv_buf.seq);
                 sprintf(fname, "./outputs/%d.png", recv_buf.seq);
                 write_file(fname, recv_buf.buf, recv_buf.size);
-                printf("MASK: %lu\n",mask );
+//                printf("MASK: %lu\n", *p_in->curr_mask );
             }
         }
     }
 
-    /* Concat images by sequence number */
-    // concate 50 png files
-    concat_50();
-
-    
-
-    /* cleaning up */
+        /* cleaning up */
     curl_easy_cleanup(curl_handle);
     curl_global_cleanup();
     recv_buf_cleanup(&recv_buf);
-    return 0;
-}
+    pthread_exit(0);
+        
+  //  return ((void *)p_out);
+    }
 
 void clean_output_dir(char* folder){
     DIR *p_dir = opendir(folder);
@@ -354,7 +403,7 @@ int concat_50(){
 
         ret = mem_inf(gp_buf_inf + len_concat, &len_inf, data.p_data, data.length);
         if (ret == 0) { /* success */
-            printf("original len = %d, len_inf = %lu\n", data.length, len_inf);
+//            printf("original len = %d, len_inf = %lu\n", data.length, len_inf);
         } else { /* failure */
             fprintf(stderr,"mem_def failed. ret = %d.\n", ret);
             return ret;
