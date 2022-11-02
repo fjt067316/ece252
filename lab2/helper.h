@@ -87,7 +87,7 @@ int is_png(U8 *buf);
 int get_png_height(struct data_IHDR *buf);
 int get_png_width(struct data_IHDR *buf);
 int get_png_data_IHDR(struct data_IHDR *out, FILE *fp);
-int get_png_data_IDAT(struct chunk *out, FILE *fp);
+int get_png_data_IDAT(struct chunk *out, char* bp);
 int mem_def(U8 *dest, U64 *dest_len, U8 *source,  U64 source_len, int level);
 void zerr(int ret);
 int filetype(char *filepath);
@@ -185,19 +185,24 @@ int get_png_data_IHDR(struct data_IHDR *out, FILE *fp) {
     return 0;
 }
 
-int get_png_data_IDAT(struct chunk *out, FILE *fp){
+int get_png_data_IDAT(struct chunk *out, char* bp){
 
-    fseek(fp, 33 , SEEK_SET);
+//    fseek(fp, 33 , SEEK_SET);
     // read idat data length and make sure chunk type is idat
     // 4 Bytes idat length
-    fread( &(out->length) , sizeof(U32), 1, fp); // read chunk data length
+//    fread( &(out->length) , sizeof(U32), 1, fp); // read chunk data length
+    memcpy(&(out->length), bp+33, sizeof(U32));
     out->length = htonl(out->length);
-    fread( &(out->type) , sizeof(U32), 1, fp);
+//    fread( &(out->type) , sizeof(U32), 1, fp);
+    memcpy(&(out->type), bp+37, sizeof(U32));
     out->p_data = malloc( out->length ); // malloc(256*16)
     
-    fread( out->p_data , out->length, 1, fp);
+ //   fread( out->p_data , out->length, 1, fp);
+    memcpy(out->p_data, bp+41, out->length);
     // 4B crc
-    fread( &(out->crc) , sizeof(U32), 1, fp);
+//    fread( &(out->crc) , sizeof(U32), 1, fp);
+    memcpy(&(out->crc), bp+(41+out->length), sizeof(U32));
+
     
     return 0;
 }
@@ -213,12 +218,13 @@ void resize(U8** buffer, long int *size){
 }
 
 // MAKE SURE TO USE ntoh() WHEN WRITTING LENGTH OF DATA TO IDAT
-int get_height(FILE* fp){
+int get_height(char* bp){
 
     unsigned int height;
     // fseek just to be sure but don thave too
-    fseek(fp, 20 , SEEK_SET);
-    fread((char*)&height, 4, 1, fp);
+ //   fseek(fp, 20 , SEEK_SET);
+    memcpy((char*)&height, bp+20, 4);
+//    fread((char*)&height, 4, 1, fp);
     height = htonl(height);
     return height;
 }

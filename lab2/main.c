@@ -44,6 +44,7 @@
  * GLOBALS 
  *****************************************************************************/
 U8 gp_buf_def[BUF_LEN2]; /* output buffer for mem_def() */
+char* buffer[50]; // buffer of 50 buffer pointers
 
 #define IMG_URL "http://ece252-1.uwaterloo.ca:2520/image?img=1"
 #define DUM_URL "https://example.com/"
@@ -239,6 +240,7 @@ int main( int argc, char** argv )
     struct thread_ret *p_results[NUM_THREADS];
     char url[256];
 
+
     if (argc == 1) {
         strcpy(url, IMG_URL); 
     } else {
@@ -247,7 +249,7 @@ int main( int argc, char** argv )
 
     printf("%s: URL is %s\n", argv[0], url);
     
-    clean_output_dir("./outputs/");
+//    clean_output_dir("./outputs/");
 
     for (int i=0; i<NUM_THREADS; i++) {
         in_params[i].curr_mask = &mask;
@@ -330,10 +332,11 @@ void * get_image(void* args){
 	        // printf("%lu bytes received in memory %p, seq=%d.\n", recv_buf.size, recv_buf.buf, recv_buf.seq);
             if( 0 == ( (uint64_t) *p_in->curr_mask & ((uint64_t)1<< recv_buf.seq)) ){  
                 *(p_in->curr_mask) |= (uint64_t)1 << recv_buf.seq;
-                // write file to ouputs folder
-//                printf("seq=%d.\n", recv_buf.seq);
-                sprintf(fname, "./outputs/%d.png", recv_buf.seq);
-                write_file(fname, recv_buf.buf, recv_buf.size);
+                //sprintf(fname, "./outputs/%d.png", recv_buf.seq);
+                int id = recv_buf.seq;
+                buffer[id] = malloc( recv_buf.size );
+                memcpy(buffer[id], recv_buf.buf, recv_buf.size);
+                //write_file(fname, recv_buf.buf, recv_buf.size);
 //                printf("MASK: %lu\n", *p_in->curr_mask );
             }
         }
@@ -389,12 +392,10 @@ int concat_50(){
     // LOOP writting uncompressed IDAT to file then recompress and look at length and ntoh length and ad length field to IHDR and make IEND data
     for(int i=0; i < 50; i++){
 
-        sprintf(path, "./outputs/%d.png", i);
-        FILE* fp = fopen(path, "rb");  // DO NOT DELETE
         struct chunk data;
 
-        get_png_data_IDAT( &data, fp);
-        concat_height = concat_height + get_height(fp);
+        get_png_data_IDAT( &data, buffer[i]);
+        concat_height = concat_height + get_height(buffer[i]);
         // resize array if we are nearly full or predicted to go over capacity given an average inflation sizae of ~24 times
         if(len_concat+data.length*23 > inf_buf_size){
             gp_buf_inf = (U8 *) realloc(gp_buf_inf, (len_concat+data.length*24)*2 );
@@ -410,7 +411,7 @@ int concat_50(){
         }
 
         len_concat = len_concat + len_inf;
-        fclose(fp);
+//        fclose(fp);
 
     }
 
@@ -426,24 +427,22 @@ int concat_50(){
 
     // write png sig to file copying from the first png
     // make sure at least one arg 
-    FILE* fp = fopen("./outputs/0.png", "rb");                  // DO NOT DELETE
+//    FILE* fp = fopen("./outputs/0.png", "rb");                  // DO NOT DELETE
     
     // copy ihdr from the first file into the new png that will be created so it has all the same info   
-    char bytes[33]; // make dynamic to free
-    fread(bytes, 33, 1, fp); // read 33 bytes into buffer bytes
-    fwrite(bytes, 33, 1, bp);
+ //   char bytes[33]; // make dynamic to free]
+ //   fread(bytes, 33, 1, fp); // read 33 bytes into buffer bytes
+    fwrite(buffer[0], 33, 1, bp);
     //write height to file
     fseek(bp, 20, SEEK_SET);
     concat_height = ntohl(concat_height);
     fwrite( &concat_height, 4, 1, bp);
     // calculate crc for ihdr and add
     fseek(bp, 12, SEEK_SET); // seek to ihdr data field
-    fread(bytes, 17, 1, bp); // read the ihdr data field (13 bytes)
-    crc_val = htonl(crc(bytes, 17));
+    fread(buffer[0], 17, 1, bp); // read the ihdr data field (13 bytes)
+    crc_val = htonl(crc(buffer[0], 17));
     fseek(bp, 29, SEEK_SET);    // go to crc position
     fwrite( &crc_val, 4, 1, bp); //write crc data
-
-    fclose(fp);
 
     // add IDAT data length and chunk type along with data
     unsigned char idat[4] = { 'I', 'D', 'A', 'T'};
