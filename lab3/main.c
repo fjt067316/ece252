@@ -252,7 +252,7 @@ int main( int argc, char** argv )
     pid_t cpids[NUM_CHILD];
     // printf("shm_size: %d\n", shm_size);
     int stack_id = shmget( IPC_PRIVATE, shm_size, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
-    int buf50_id = shmget( IPC_PRIVATE, 5*sizeof(void*), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+    int buf50_id = shmget( IPC_PRIVATE, 50*sizeof(void*), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
     int bitmask_id = shmget( IPC_PRIVATE, sizeof(long unsigned int), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR); // issue here with IPC_EXCL maybe?
 
     sem_unlink(SNAME_EMPTY);
@@ -276,7 +276,7 @@ int main( int argc, char** argv )
     int i =0;
     int buf_id;
     for(i=0; i < 50; i++){ // create 50 shared buffer segments that consumers can dump into
-        buf_id = shmget( IPC_PRIVATE, 10000, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+        buf_id = shmget( IPC_PRIVATE, 300000, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
         buf50[i] = shmat( buf_id, NULL, 0);
     }
 
@@ -311,31 +311,13 @@ int main( int argc, char** argv )
     }
     
 
-//    int s0;
-//    int s1;
-//    int s3;
-//
-//
-//     while(1){
-//        sem_getvalue(empty, &s0);
-//        sem_getvalue(full, &s1);
-//        sem_getvalue(mutex, &s1);
-//        printf("spots_left: %d in_q: %d mutex: %d\n", s0, s1, s3);
-//         
-//     }
+
     wait( &child_return );
     
-        // Trivially parent process out here
-    char* bub = buf50[34];
-    //printf("aa%.*sbb\n", 3000, bub);
-    //printf("33: %d\n", htonl(bub+33));
-    //int len;
-    //memcpy(&len, bub+33, sizeof(U32));
-    //len = htonl(len);
-    //printf("aa%.*sbb\n", 1000, bub);
-    //printf("UH %d\n", len);
-    //get_png_data_IDAT( &out, buf50[0]);
+    // Trivially parent process out here
+
     concat_50(buf50); // concats the 50 items in global buffer of pointers
+
     return 0;
 }
 
@@ -356,29 +338,55 @@ int concat_50(void** buffer){
     
 
     // LOOP writting uncompressed IDAT to file then recompress and look at length and ntoh length and ad length field to IHDR and make IEND data
+    //for(int i=0; i < 50; i++){
+//
+    //    struct chunk data;
+    //    get_png_data_IDAT( &data, buffer[i]);
+    //    //printf("%d\n", data.length);
+    //    
+    //    concat_height = concat_height + get_height(buffer[i]);
+    //    // resize array if we are nearly full or predicted to go over capacity given an average inflation sizae of ~24 times
+    //    if(len_concat+data.length*23 > inf_buf_size){
+    //        gp_buf_inf = (U8 *) realloc(gp_buf_inf, (len_concat+data.length*24)*2 );
+    //        inf_buf_size = (len_concat+data.length*23)*2;
+    //    }
+//
+    //    ret = mem_inf(gp_buf_inf + len_concat, &len_inf, data.p_data, data.length);
+    //    if (ret == 0) { /* success */
+//  //          printf("original len = %d, len_inf = %lu\n", data.length, len_inf);
+    //    } else { /* failure */
+    //        fprintf(stderr,"mem_def failed. ret = %d.\n", ret);
+    //        return ret;
+    //    }
+//
+    //    len_concat = len_concat + len_inf;
+//  //      fclose(fp);
+//
+    //}
+    int data_len;
+    char *p_data;
     for(int i=0; i < 50; i++){
 
-        struct chunk data;
-        get_png_data_IDAT( &data, buffer[i]);
-        printf("%d\n", data.length);
-        
-        concat_height = concat_height + get_height(buffer[i]);
+        // get concatenated height
+        // get concatenated len
+
+         concat_height = concat_height + get_height(buffer[i]);
+         memcpy(&data_len, buffer[i]+33, sizeof(int));
+         //printf("data_len: %d\n", data_len);
+         p_data = buffer[i] + 33 + sizeof(int);
+
         // resize array if we are nearly full or predicted to go over capacity given an average inflation sizae of ~24 times
-        if(len_concat+data.length*23 > inf_buf_size){
-            gp_buf_inf = (U8 *) realloc(gp_buf_inf, (len_concat+data.length*24)*2 );
-            inf_buf_size = (len_concat+data.length*23)*2;
+        if(len_concat+data_len > inf_buf_size){
+            gp_buf_inf = (U8 *) realloc(gp_buf_inf, (len_concat+data_len)*2 );
+            inf_buf_size = (len_concat+data_len)*2;
         }
 
-        ret = mem_inf(gp_buf_inf + len_concat, &len_inf, data.p_data, data.length);
-        if (ret == 0) { /* success */
-//            printf("original len = %d, len_inf = %lu\n", data.length, len_inf);
-        } else { /* failure */
-            fprintf(stderr,"mem_def failed. ret = %d.\n", ret);
-            return ret;
-        }
+        memcpy(gp_buf_inf+len_concat, p_data, data_len);
 
-        len_concat = len_concat + len_inf;
-//        fclose(fp);
+        //printf("len: %d\n", data_len);
+
+        len_concat += data_len;
+
 
     }
 
@@ -390,16 +398,18 @@ int concat_50(void** buffer){
         fprintf(stderr,"mem_def failed. ret = %d.\n", ret);
     }
 
-    FILE* bp = fopen("concat.png", "wb+");
+
+    FILE* bp = fopen("all.png", "wb+");
 
     // write png sig to file copying from the first png
     // make sure at least one arg 
 //    FILE* fp = fopen("./outputs/0.png", "rb");                  // DO NOT DELETE
-    
+
     // copy ihdr from the first file into the new png that will be created so it has all the same info   
- //   char bytes[33]; // make dynamic to free]
- //   fread(bytes, 33, 1, fp); // read 33 bytes into buffer bytes
+//    char bytes[33]; // make dynamic to free]
+//    fread(bytes, 33, 1, fp); // read 33 bytes into buffer bytes
     fwrite(buffer[0], 33, 1, bp);
+    
     //write height to file
     fseek(bp, 20, SEEK_SET);
     concat_height = ntohl(concat_height);
@@ -407,6 +417,7 @@ int concat_50(void** buffer){
     // calculate crc for ihdr and add
     fseek(bp, 12, SEEK_SET); // seek to ihdr data field
     fread(buffer[0], 17, 1, bp); // read the ihdr data field (13 bytes)
+ 
     crc_val = htonl(crc(buffer[0], 17));
     fseek(bp, 29, SEEK_SET);    // go to crc position
     fwrite( &crc_val, 4, 1, bp); //write crc data
@@ -415,13 +426,17 @@ int concat_50(void** buffer){
     unsigned char idat[4] = { 'I', 'D', 'A', 'T'};
     /* merge idat chunk type and deflated data */
     U8* idat_crc_buf = malloc(len_def + 4);
+    
     memcpy(idat_crc_buf, idat, 4); // copy chars into crc buffer
+    printf("hit\n");
     memcpy(idat_crc_buf+4, gp_buf_def, len_def); // copy chars into crc buffer
+    printf("hit2\n");
+    
     len_def = htonl(len_def);
     fwrite(&len_def, 4,1,bp); // write length of idat chunk
     len_def = ntohl(len_def);
     fwrite(idat_crc_buf, len_def+4,1,bp);
-
+    
     crc_val = htonl( crc(idat_crc_buf, len_def+4) ); // CRC USES TYPE AND DATA FIELD
     fwrite(&crc_val, 4,1,bp); // write compressed binary data 
     
@@ -631,8 +646,29 @@ void push_buf(void** buf50, RECV_BUF *recv_buf){
     //printf("aa%.*sbb\n", recv_buf->size, recv_buf->buf);
     //printf("aa%.*sbb\n", recv_buf->size, recv_buf->buf);
 
+    struct chunk data;
+    get_png_data_IDAT( &data, recv_buf->buf);
+    //printf("%d\n", data.length);
+    
+    //int height = get_height(recv_buf->buf);
+    int size = 0;
     void* bp = buf50[recv_buf->seq];
-    memcpy(bp, recv_buf->buf, recv_buf->size);
+    int ret = mem_inf(bp+33+sizeof(int), &size, data.p_data, data.length);
+
+    if (ret == 0) { /* success */
+//           printf("original len = %d, len_inf = %lu\n", data.length, len_inf);
+    } else { /* failure */
+        fprintf(stderr,"mem_def failed. ret = %d.\n", ret);
+        return ret;
+    }
+
+    memcpy(bp, recv_buf->buf, 33); // copy IHDR to first 33 Bytes
+    memcpy(bp+33, &size, sizeof(int)); // write data size to second int index in array
+
+        // len_concat = len_concat + len_inf;
+
+    
+    // memcpy(bp, recv_buf->buf, recv_buf->size);
 
     //int len;
     //memcpy(&len, bp+33, sizeof(U32));
