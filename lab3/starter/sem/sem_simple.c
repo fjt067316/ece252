@@ -39,6 +39,7 @@ int main( int argc, char** argv ) {
     /* attach to shared memory regions */
     buf = shmat(shmid, NULL, 0);
     sems = shmat(shmid_sems, NULL, 0);
+    
     if ( buf == (void *) -1 || sems == (void *) -1 ) {
         perror("shmat");
         abort();

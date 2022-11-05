@@ -1,3 +1,35 @@
+
+/* The code is 
+ * Copyright(c) 2018-2019 Yiqing Huang, <yqhuang@uwaterloo.ca>.
+ *
+ * This software may be freely redistributed under the terms of the X11 License.
+ */
+/**
+ * @brief  stack to push/pop integer(s), API header  
+ * @author yqhuang@uwaterloo.ca
+ */
+#include <stdio.h>
+#include <stdlib.h>
+struct int_stack;
+
+int sizeof_shm_stack(int size);
+int init_shm_stack(struct int_stack *p, int stack_size);
+struct int_stack *create_stack(int size);
+void destroy_stack(struct int_stack *p);
+int is_full(struct int_stack *p);
+int is_empty(struct int_stack *p);
+
+typedef struct recv_buf2 {
+    char *buf;       /* memory to hold a copy of received data */
+    size_t size;     /* size of valid data in buf in bytes*/
+    size_t max_size; /* max capacity of buf in bytes*/
+    int seq;         /* >=0 sequence number extracted from http header */
+                     /* <0 indicates an invalid seq number */
+} RECV_BUF;
+
+int push(struct int_stack *p, RECV_BUF item);
+int pop(struct int_stack *p, RECV_BUF *p_item);
+
 /*
  * The code is derived from 
  * Copyright(c) 2018-2019 Yiqing Huang, <yqhuang@uwaterloo.ca>.
@@ -9,9 +41,6 @@
  * @brief  stack to push/pop integers.   
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include "shm_stack.h"
 
 /* a stack that can hold integers */
 /* Note this structure can be used by shared memory,
@@ -40,7 +69,8 @@ typedef struct int_stack
 {
     int size;               /* the max capacity of the stack */
     int pos;                /* position of last item pushed onto the stack */
-    int *items;             /* stack of stored integers */
+    RECV_BUF *items;             /* stack of stored integers */
+    void *buf;              /* Buffer to hold recv_buf and its data*/
 } ISTACK;
 
 /**
@@ -53,7 +83,8 @@ typedef struct int_stack
 
 int sizeof_shm_stack(int size)
 {
-    return (sizeof(ISTACK) + sizeof(int) * size);
+    //return (sizeof(ISTACK) + sizeof(int) * size);
+    return (sizeof(ISTACK) + 10000 * size);
 }
 
 /**
@@ -73,7 +104,10 @@ int init_shm_stack(ISTACK *p, int stack_size)
 
     p->size = stack_size;
     p->pos  = -1;
-    p->items = (int *) (p + sizeof(ISTACK));
+    p->items = (RECV_BUF *) (p + sizeof(ISTACK));
+    int buf_id = shmget( IPC_PRIVATE, 10000*stack_size, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+    p->buf = shmat( buf_id, NULL, 0);
+    
     return 0;
 }
 
@@ -100,7 +134,7 @@ ISTACK *create_stack(int size)
         perror("malloc");
     } else {
         char *p = (char *)pstack;
-        pstack->items = (int *) (p + sizeof(ISTACK));
+        pstack->items = (RECV_BUF *) (p + sizeof(ISTACK));
         pstack->size = size;
         pstack->pos  = -1;
     }
@@ -155,14 +189,28 @@ int is_empty(ISTACK *p)
  * @return 0 on success; non-zero otherwise
  */
 
-int push(ISTACK *p, int item)
+int push(ISTACK *p, RECV_BUF item)
 {
     if ( p == NULL ) {
         return -1;
     }
 
     if ( !is_full(p) ) {
+
+        if(p->pos == -1){
+            void* bp = p->buf;
+//            printf("hit\n");
+            memcpy(bp, item.buf, item.size); // seg fault
+            item.buf = bp;
+            ++(p->pos);
+            p->items[p->pos] = item;
+            return 0;
+        }
+        
+        void* bp = p->items[p->pos].buf + p->items[p->pos].size+1;
+        memcpy(bp, item.buf, item.size);
         ++(p->pos);
+        item.buf = bp;
         p->items[p->pos] = item;
         return 0;
     } else {
@@ -178,16 +226,17 @@ int push(ISTACK *p, int item)
  * @return 0 on success; non-zero otherwise
  */
 
-int pop(ISTACK *p, int *p_item)
+int pop(ISTACK *p, RECV_BUF *p_item)
 {
     if ( p == NULL ) {
         return -1;
     }
 
     if ( !is_empty(p) ) {
+
         *p_item = p->items[p->pos];
         (p->pos)--;
-        return 0;
+        return 0; // return size
     } else {
         return 1;
     }

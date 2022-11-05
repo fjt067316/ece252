@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "array": "c",
+        "string_view": "c",
+        "type_traits": "c",
+        "shm_stack.h": "c",
+        "shm.h": "c",
+        "types.h": "c"
+    }
+}
